@@ -1,0 +1,20 @@
+{
+    "name": "MemoMath - Treino de Memorização Matemática",
+    "short_name": "MemoMath",
+    "description": "Treine sua agilidade mental e memorização matemática com resposta em até 2 segundos.",
+    "lang": "pt-BR",
+    "start_url": "./MemoMath.html",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#222222",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "./Icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}
