@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>MemoMath - Memorização Matemática</title>
-    <meta name="description" content="Treine memorização matemática em alta velocidade com resposta em até 2 segundos.">
+    <meta name="description" content="Treine memorização matemática em alta velocidade com 1.5 segundos por dígito da resposta.">
     <meta name="theme-color" content="#222222">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -111,6 +111,12 @@
             gap: 6px;
         }
 
+        /* Garante que campos com o atributo [hidden] realmente sumam da tela
+           (o display:grid do .field sobrepõe o display:none padrão do navegador). */
+        .field[hidden] {
+            display: none;
+        }
+
         .field-title {
             color: var(--text-muted);
             font-size: .78rem;
@@ -140,6 +146,29 @@
             background: var(--button-bg);
             color: #777;
             cursor: not-allowed;
+        }
+
+        .limit-input {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font: inherit;
+            font-weight: 700;
+        }
+
+        .limit-input:focus-visible {
+            border-color: #555;
+            outline: none;
+        }
+
+        .field-hint {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: .8rem;
+            line-height: 1.4;
         }
 
         .phase-info {
@@ -342,7 +371,7 @@
             background: var(--button-bg);
         }
 
-        /* Circular Countdown Timer (2 Segundos) */
+        /* Circular Countdown Timer (proporcional ao tamanho da resposta) */
         .timer-circle-wrapper {
             position: relative;
             width: min(72vw, 240px);
@@ -616,7 +645,7 @@
             </button>
         </div>
         <h1>MemoMath</h1>
-        <p class="subtitle">Memorização matemática com resposta em até 2 segundos.</p>
+        <p class="subtitle">Memorização matemática com 1.5 segundos por dígito da resposta.</p>
     </header>
 
     <section class="settings" aria-label="Configurações do Treino">
@@ -630,6 +659,22 @@
             <select id="phase-select" aria-label="Escolha a fase"></select>
         </div>
 
+        <div class="field" id="limit-field" hidden>
+            <label class="field-title" for="limit-input">Limite</label>
+            <input
+                type="number"
+                inputmode="numeric"
+                id="limit-input"
+                class="limit-input"
+                min="1"
+                step="1"
+                max="100"
+                value="1"
+                placeholder="1"
+            />
+            <p class="field-hint" id="limit-hint">Começa sempre em 1. Digite até onde vai a sequência.</p>
+        </div>
+
         <div class="phase-info" id="phase-info" aria-live="polite">
             <strong id="phase-title">Carregando fase...</strong>
             <p id="phase-description"></p>
@@ -638,12 +683,12 @@
     </section>
 
     <button type="button" class="primary" id="start-button">
-        Iniciar treino (2s)
+        Iniciar treino (1.5s/dígito)
     </button>
 
     <div class="game-instructions">
-        Modo aleatório com todos os itens da fase (exceto primos, que são em ordem contínua).<br>
-        Tempo de resposta: 2 segundos por questão.<br>
+        Modo aleatório com todos os itens da fase (exceto primos e dígitos de π, que são em ordem contínua).<br>
+        Tempo de resposta: 1.5 segundos por dígito da resposta (mínimo de 1.5s).<br>
         Em caso de erro, a resposta correta fica na tela por 10 segundos no centro.
     </div>
 
@@ -679,7 +724,7 @@
                 autocomplete="off" 
                 autocorrect="off" 
                 spellcheck="false"
-                maxlength="10"
+                maxlength="20"
             />
         </div>
 
@@ -708,14 +753,46 @@
 </div>
 
 <script>
-/**
- * MemoMath - Memorização Matemática em Alta Velocidade (2s)
- */
-const RESPONSE_TIME = 2000;      // 2 segundos por questão
-const CORRECTION_TIME = 10000;   // 10 segundos no centro
+/* ============================================================================
+ * ⚙️  CONFIGURAÇÕES GLOBAIS DO MEMOMATH  ⚙️
+ * ----------------------------------------------------------------------------
+ * É AQUI que você muda o comportamento do jogo inteiro.
+ * Todas as constantes abaixo são usadas por TODOS os módulos e pelo timer.
+ * Altere os valores e recarregue a página — não precisa mudar mais nada.
+ * ========================================================================== */
+
+/* --- TIMER (proporcional ao tamanho da resposta) ----------------------- */
+const SECONDS_PER_DIGIT = 1.5;      // Tempo por dígito da resposta (em segundos).
+                                    // 1.5 => 1 dígito = 1.5s, 2 dígitos = 3s, 3 dígitos = 4.5s...
+const MIN_RESPONSE_TIME = 1500;   // Tempo mínimo de resposta em ms (teto inferior).
+                                    // Garante pelo menos 1.5s mesmo para respostas de 1 dígito.
+const TICK_SOUND_SECONDS = 3;     // Quantos segundos finais tocam o "tic" do relógio.
+
+/* --- TELA DE CORREÇÃO (quando erra) ------------------------------------- */
+const CORRECTION_TIME = 10000;    // Tempo que a resposta correta fica no centro (ms).
+
+/* --- ENTRADA DE DADOS ---------------------------------------------------- */
+const MAX_INPUT_DIGITS = 20;      // Máximo de dígitos aceitos no campo de resposta.
+
+/* --- MÓDULO DE PI (sequência infinita, igual aos primos) ---------------- */
+const PI_CHUNK_DIGITS = 3;        // Quantos dígitos de π o usuário digita por questão.
+                                    // 3 => "3," + 3 dígitos (ex.: 141) e 4.5s de tempo.
+const PI_TOTAL_DIGITS = 1000;     // Tamanho inicial do cache de dígitos de π.
+                                    // O cache cresce sob demanda: a sequência é infinita.
+
+/* --- FASE PERSONALIZADA ("até que número vai?") ------------------------- */
+const MAX_SQUARE_BASE = 100;      // Limite do número base em quadrados (1²..100²).
+const MAX_CUBE_BASE = 100;        // Limite do número base em cubos (1³..100³).
+
+/* --- ARMAZENAMENTO LOCAL ------------------------------------------------ */
 const STORAGE_PREFIX = 'memomath_progress_';
 const THEME_KEY = 'memomath_theme';
 const SOUND_KEY = 'memomath_sound';
+
+/**
+ * MemoMath - Memorização Matemática em Alta Velocidade
+ * Timer: SECONDS_PER_DIGIT segundos por dígito da resposta.
+ */
 
 /* Audio Synthesizer */
 let audioCtx = null;
@@ -856,7 +933,157 @@ function factorial(n) {
 }
 
 /* =====================================================================
-   MÓDULOS DE CONTEÚDO (TODOS EM MODO ALEATÓRIO, EXCETO PRIMOS)
+   NÚMERO DE PI (dígitos calculados por fórmula de Machin com BigInt)
+   π = 16·arctan(1/5) − 4·arctan(1/239)
+   ===================================================================== */
+
+/* arctan(1/x) em ponto fixo: retorna one·arctan(1/x) */
+function bigIntArctanInv(x, one) {
+    let total = one / x;
+    let term = total;
+    const xSquared = x * x;
+    let k = 1;
+    while (true) {
+        term /= xSquared;
+        if (term === 0n) break;
+        const add = term / BigInt(2 * k + 1);
+        if (k % 2 === 1) total -= add;
+        else total += add;
+        k++;
+    }
+    return total;
+}
+
+/* Cache dos dígitos de π já calculados (evita recalcular a cada rodada). */
+let piDigitsCache = null;
+
+/**
+ * Retorna uma string com os primeiros `numDigits` dígitos de π,
+ * incluindo o "3" inicial e sem o ponto decimal (ex.: "3141592653...").
+ */
+function getPiDigits(numDigits) {
+    if (!piDigitsCache) {
+        piDigitsCache = computePiDigits(PI_TOTAL_DIGITS);
+    }
+    if (piDigitsCache.length < numDigits) {
+        // A sequência de π é infinita: recalculamos com folga para o próximo trecho.
+        piDigitsCache = computePiDigits(Math.max(numDigits, piDigitsCache.length * 2));
+    }
+    return piDigitsCache.slice(0, numDigits);
+}
+
+/**
+ * Calcula os dígitos de π pela fórmula de Machin usando BigInt:
+ *   π = 16·arctan(1/5) − 4·arctan(1/239)
+ * A margem de segurança (guard) absorve o erro de truncamento das divisões.
+ */
+function computePiDigits(numDigits) {
+    const guard = Math.ceil(numDigits * 1.2) + 30;
+    const precision = numDigits + guard;
+    const one = 10n ** BigInt(precision);
+
+    const pi = 16n * bigIntArctanInv(5n, one) - 4n * bigIntArctanInv(239n, one);
+    return pi.toString().padStart(precision + 1, '0').slice(0, numDigits);
+}
+
+/* =====================================================================
+   MÓDULO DE PI — integração com o fluxo de perguntas
+   ===================================================================== */
+
+/** Retorna true se o módulo atual é o de dígitos de π. */
+function isPiModule() {
+    const mod = MODULES[currentModuleIndex];
+    return !!mod && mod.id === 'pi';
+}
+
+/** Quantos dígitos de π (após o "3,") já foram exibidos. */
+function getPiConsumed() {
+    return Math.max(0, piCurrent.length - 1);
+}
+
+/**
+ * Monta a próxima questão de π.
+ * A tela mostra o que já foi digitado, mas de forma compacta:
+ *   - 1ª rodada: "3," (nenhum dígito digitado ainda)
+ *   - 2ª rodada: "3,141" (cabe o bloco inteiro)
+ *   - 3ª+ rodadas: "...592", "...653" (só o último bloco, com "..." na frente)
+ * Você digita apenas o PRÓXIMO bloco de PI_CHUNK_DIGITS dígitos.
+ */
+function buildPiQuestion() {
+    const consumed = getPiConsumed();
+    const need = 1 + consumed + PI_CHUNK_DIGITS;
+    const digits = getPiDigits(need);          // ex.: "3141592653"
+    const chunk = digits.slice(1 + consumed, need);
+
+    // Último bloco já exibido (o que o usuário acabou de responder).
+    const lastBlockStart = Math.max(0, consumed - PI_CHUNK_DIGITS);
+    const lastBlock = consumed > 0 ? digits.slice(1 + lastBlockStart, 1 + consumed) : '';
+
+    let question;
+    if (consumed === 0) {
+        question = '3,';                       // nada digitado ainda
+    } else if (consumed <= PI_CHUNK_DIGITS) {
+        question = `3,${digits.slice(1, 1 + consumed)}`;  // cabe o 1º bloco inteiro
+    } else {
+        question = `...${lastBlock}`;          // da 3ª rodada em diante: só o último bloco
+    }
+
+    return {
+        question,
+        sub: consumed === 0 ? '' : `Próximo bloco de ${PI_CHUNK_DIGITS} dígitos`,
+        correctAnswer: chunk
+    };
+}
+
+/** Avança a sequência de π após um acerto. */
+function advancePi() {
+    const consumed = getPiConsumed();
+    piCurrent = '3' + getPiDigits(1 + consumed + PI_CHUNK_DIGITS).slice(1);
+    piBlockIndex++;
+}
+
+/* =====================================================================
+   FASE COM LIMITE PERSONALIZADO
+   O usuário informa até que número vai (sempre começando em 1).
+   ===================================================================== */
+
+/**
+ * Cria um deck de 1..limite para um módulo, respeitando o limite escolhido.
+ * @param {number} limit        - último número da sequência (>= 1)
+ * @param {(n:number)=>object} makeItem - monta a questão para o número n
+ * @param {number} maxLimit     - limite máximo permitido pelo módulo
+ */
+function buildLimitedDeck(limit, makeItem, maxLimit) {
+    const safeLimit = Math.max(1, Math.min(maxLimit, Math.floor(limit) || 1));
+    const deck = [];
+    for (let n = 1; n <= safeLimit; n++) {
+        deck.push(makeItem(n));
+    }
+    return deck;
+}
+
+/* --- Construtores de itens por módulo ---------------------------------- */
+const limitedItemBuilders = {
+    quadrados: (n) => ({
+        question: `${n}²`,
+        sub: '',
+        correctAnswer: `${n * n}`
+    }),
+    cubos: (n) => ({
+        question: `${n}³`,
+        sub: '',
+        correctAnswer: `${n * n * n}`
+    })
+};
+
+/* Limite máximo de cada módulo com fase personalizável. */
+const LIMITED_MODULE_LIMITS = {
+    quadrados: MAX_SQUARE_BASE,
+    cubos: MAX_CUBE_BASE
+};
+
+/* =====================================================================
+   MÓDULOS DE CONTEÚDO (TODOS EM MODO ALEATÓRIO, EXCETO PRIMOS E PI)
    ===================================================================== */
 const MODULES = [
     {
@@ -913,8 +1140,46 @@ const MODULES = [
                 id: 'primos_infinito',
                 title: 'Sequência Infinita de Primos',
                 description: 'Digite o próximo número primo em ordem (2 -> 3, 3 -> 5, 5 -> 7...) até errar.',
-                tips: 'Apenas este módulo é em ordem contínua. Responda em até 2 segundos.',
+                tips: 'Este módulo é em ordem contínua. O tempo cresce com o número de dígitos.',
                 buildDeck() { return []; }
+            }
+        ]
+    },
+    {
+        id: 'pi',
+        title: 'Dígitos de Pi (Em Ordem)',
+        isInfinite: true,
+        phases: [
+            {
+                id: 'pi_infinito',
+                title: 'Sequência Infinita de Pi',
+                description: `Digite os próximos dígitos de π em ordem (3,141 -> ...592 -> ...653). Cada bloco tem ${PI_CHUNK_DIGITS} dígitos.`,
+                tips: `Mostramos o último bloco digitado ("..." indica que já existe histórico). Você digita apenas o próximo bloco de ${PI_CHUNK_DIGITS} dígitos.`,
+                buildDeck() { return []; }
+            }
+        ]
+    },
+    {
+        id: 'fatoriais',
+        title: 'Fatoriais (1! até 9!)',
+        isInfinite: false,
+        phases: [
+            {
+                id: 'fat_9',
+                title: '1! até 9! (Aleatório)',
+                description: 'Fatoriais de 1! até 9! em ordem aleatória.',
+                tips: '1!=1, 2!=2, 3!=6, 4!=24, 5!=120, 6!=720, 7!=5040, 8!=40320, 9!=362880.',
+                buildDeck() {
+                    const deck = [];
+                    for (let n = 1; n <= 9; n++) {
+                        deck.push({
+                            question: `${n}!`,
+                            sub: '',
+                            correctAnswer: `${factorial(n)}`
+                        });
+                    }
+                    return deck;
+                }
             }
         ]
     },
@@ -938,6 +1203,16 @@ const MODULES = [
                         });
                     }
                     return deck;
+                }
+            },
+            {
+                id: 'quad_personalizado',
+                title: 'Personalizado (defina o limite)',
+                description: 'Escolha até que número vai e treine os quadrados de 1² até esse limite.',
+                tips: `Começa sempre em 1². Limite máximo: ${MAX_SQUARE_BASE}².`,
+                isLimited: true,
+                buildDeck(limit) {
+                    return buildLimitedDeck(limit, limitedItemBuilders.quadrados, MAX_SQUARE_BASE);
                 }
             }
         ]
@@ -963,29 +1238,15 @@ const MODULES = [
                     }
                     return deck;
                 }
-            }
-        ]
-    },
-    {
-        id: 'fatoriais',
-        title: 'Fatoriais (1! até 9!)',
-        isInfinite: false,
-        phases: [
+            },
             {
-                id: 'fat_9',
-                title: '1! até 9! (Aleatório)',
-                description: 'Fatoriais de 1! até 9! em ordem aleatória.',
-                tips: '1!=1, 2!=2, 3!=6, 4!=24, 5!=120, 6!=720, 7!=5040, 8!=40320, 9!=362880.',
-                buildDeck() {
-                    const deck = [];
-                    for (let n = 1; n <= 9; n++) {
-                        deck.push({
-                            question: `${n}!`,
-                            sub: '',
-                            correctAnswer: `${factorial(n)}`
-                        });
-                    }
-                    return deck;
+                id: 'cubos_personalizado',
+                title: 'Personalizado (defina o limite)',
+                description: 'Escolha até que número vai e treine os cubos de 1³ até esse limite.',
+                tips: `Começa sempre em 1³. Limite máximo: ${MAX_CUBE_BASE}³.`,
+                isLimited: true,
+                buildDeck(limit) {
+                    return buildLimitedDeck(limit, limitedItemBuilders.cubos, MAX_CUBE_BASE);
                 }
             }
         ]
@@ -1102,9 +1363,19 @@ let correctionTimeoutId = null;
 // Para o modo contínuo de primos
 let primeCurrent = 2;
 
+// Para o modo contínuo de Pi (dígitos já digitados)
+let piCurrent = '3';
+let piBlockIndex = 0;
+
+// ID da última fase personalizada selecionada (para preservar o limite digitado)
+let lastLimitPhaseId = null;
+
 /* DOM */
 const moduleSelect = document.getElementById('module-select');
 const phaseSelect = document.getElementById('phase-select');
+const limitField = document.getElementById('limit-field');
+const limitInput = document.getElementById('limit-input');
+const limitHint = document.getElementById('limit-hint');
 const phaseTitle = document.getElementById('phase-title');
 const phaseDescription = document.getElementById('phase-description');
 const phaseTips = document.getElementById('phase-tips');
@@ -1137,7 +1408,14 @@ function getProgressKey(moduleId) {
 function getHighestUnlockedPhase(moduleId) {
     try {
         const val = localStorage.getItem(getProgressKey(moduleId));
-        return val !== null ? parseInt(val, 10) : 0;
+        if (val === null) return 0;
+        const parsed = parseInt(val, 10);
+        if (!Number.isFinite(parsed) || parsed < 0) return 0;
+        // Índice salvo pode ter ficado obsoleto (fases removidas em versões
+        // anteriores). Ajusta apenas em memória, sem alterar o save do usuário.
+        const mod = MODULES.find(m => m.id === moduleId);
+        const maxIndex = mod ? mod.phases.length - 1 : 0;
+        return Math.min(parsed, maxIndex);
     } catch (_) {
         return 0;
     }
@@ -1145,9 +1423,12 @@ function getHighestUnlockedPhase(moduleId) {
 
 function saveHighestUnlockedPhase(moduleId, phaseIdx) {
     try {
+        const mod = MODULES.find(m => m.id === moduleId);
+        const maxIndex = mod ? mod.phases.length - 1 : 0;
+        const target = Math.max(0, Math.min(phaseIdx, maxIndex));
         const current = getHighestUnlockedPhase(moduleId);
-        if (phaseIdx > current) {
-            localStorage.setItem(getProgressKey(moduleId), phaseIdx.toString());
+        if (target > current) {
+            localStorage.setItem(getProgressKey(moduleId), target.toString());
         }
     } catch (_) {}
 }
@@ -1175,6 +1456,18 @@ function populatePhases() {
     updatePhaseDetails();
 }
 
+/**
+ * Limite escolhido pelo usuário na fase personalizada.
+ * Sempre começa em 1 e nunca ultrapassa o máximo do módulo.
+ */
+function getSelectedLimit() {
+    const mod = MODULES[currentModuleIndex];
+    const maxLimit = LIMITED_MODULE_LIMITS[mod.id] || 1;
+    const raw = parseInt(limitInput.value, 10);
+    if (!Number.isFinite(raw)) return 1;
+    return Math.max(1, Math.min(maxLimit, raw));
+}
+
 function updatePhaseDetails() {
     const mod = MODULES[currentModuleIndex];
     const ph = mod.phases[currentPhaseIndex];
@@ -1183,6 +1476,26 @@ function updatePhaseDetails() {
     phaseTitle.textContent = ph.title;
     phaseDescription.textContent = ph.description;
     phaseTips.textContent = ph.tips ? `Dica: ${ph.tips}` : '';
+
+    // Campo "Limite" só aparece nas fases personalizadas (com limite digitável).
+    if (ph.isLimited) {
+        const maxLimit = LIMITED_MODULE_LIMITS[mod.id] || 1;
+        limitField.hidden = false;
+        limitInput.max = String(maxLimit);
+        // Só reseta o valor quando entra numa nova fase personalizada.
+        if (lastLimitPhaseId !== ph.id) {
+            limitInput.value = '1';
+            lastLimitPhaseId = ph.id;
+        } else {
+            const cur = parseInt(limitInput.value, 10);
+            limitInput.value = String(Math.max(1, Math.min(maxLimit, Number.isFinite(cur) ? cur : 1)));
+        }
+        limitHint.textContent = `Começa sempre em 1. Digite até onde vai a sequência (máx. ${maxLimit}).`;
+    } else {
+        limitField.hidden = true;
+        limitInput.value = '1';
+        lastLimitPhaseId = null;
+    }
 }
 
 function getTimerColor(progress) {
@@ -1218,9 +1531,16 @@ function startGame() {
         primeCurrent = 2;
         deckIndex = 0;
     } else {
+        // Módulos com fase personalizada usam o limite digitado pelo usuário.
+        const useLimit = ph.isLimited ? getSelectedLimit() : null;
         // Todos os outros módulos em MODO ALEATÓRIO (embaralhado)
-        currentDeck = shuffle(ph.buildDeck());
+        currentDeck = shuffle(ph.buildDeck(useLimit));
         deckIndex = 0;
+    }
+
+    if (isPiModule()) {
+        piCurrent = '3';
+        piBlockIndex = 0;
     }
 
     correctionOverlay.style.display = 'none';
@@ -1257,7 +1577,12 @@ function nextQuestion() {
 
     deckIndex++;
 
-    if (mod.isInfinite) {
+    if (isPiModule()) {
+        // π: mostra o último bloco digitado ("..." = existe histórico antes) e cobra o próximo
+        currentQuestion = buildPiQuestion();
+        arenaProgress.textContent = `Bloco ${piBlockIndex + 1}`;
+        arenaScore.textContent = `Acertos: ${score}`;
+    } else if (mod.isInfinite) {
         // Primos: formato "x ->"
         const targetNext = getNextPrime(primeCurrent);
         currentQuestion = {
@@ -1290,16 +1615,28 @@ function nextQuestion() {
     }
 }
 
+/**
+ * Tempo de resposta da questão atual: SECONDS_PER_DIGIT por dígito da resposta.
+ * Ex.: resposta "144" => 4.5s; resposta "14159" => 7.5s.
+ */
+function getResponseTime() {
+    const digits = (currentQuestion && currentQuestion.correctAnswer)
+        ? currentQuestion.correctAnswer.trim().length
+        : 1;
+    return Math.max(MIN_RESPONSE_TIME, digits * SECONDS_PER_DIGIT * 1000);
+}
+
 function startTimer() {
     if (timerAnimationId) cancelAnimationFrame(timerAnimationId);
-    const deadline = questionStartTime + RESPONSE_TIME;
-    let lastSecondTick = 2;
+    const totalTime = getResponseTime();
+    const deadline = questionStartTime + totalTime;
+    let lastSecondTick = Math.ceil(totalTime / 1000);
 
     function tick() {
         if (!waitingAnswer || !isPlaying) return;
         const now = performance.now();
         const remaining = Math.max(0, deadline - now);
-        const progress = remaining / RESPONSE_TIME;
+        const progress = remaining / totalTime;
         const secDisplay = (remaining / 1000).toFixed(1);
 
         timerText.textContent = `${secDisplay}s`;
@@ -1309,7 +1646,7 @@ function startTimer() {
         timerText.style.color = col;
 
         const currentSecInt = Math.ceil(remaining / 1000);
-        if (currentSecInt < lastSecondTick && currentSecInt <= 1) {
+        if (currentSecInt < lastSecondTick && currentSecInt <= TICK_SOUND_SECONDS) {
             lastSecondTick = currentSecInt;
             playTickSound();
         }
@@ -1344,7 +1681,9 @@ function submitAnswer() {
         playCorrectSound();
 
         const mod = MODULES[currentModuleIndex];
-        if (mod.isInfinite) {
+        if (isPiModule()) {
+            advancePi();
+        } else if (mod.isInfinite) {
             primeCurrent = parseInt(currentQuestion.correctAnswer, 10);
         }
 
@@ -1359,7 +1698,7 @@ function submitAnswer() {
 function handleTimeout() {
     if (!waitingAnswer || !isPlaying) return;
     waitingAnswer = false;
-    responseTimes.push(2.0);
+    responseTimes.push(getResponseTime() / 1000);
     numericInput.disabled = true;
     numericInput.classList.add('incorrect');
 
@@ -1404,7 +1743,7 @@ function finishGame(completedAll) {
     let isPassed = false;
     let totalQuestions = 0;
 
-    if (mod.isInfinite) {
+    if (mod.isInfinite && !isPiModule()) {
         totalQuestions = deckIndex;
         const recordKey = `${STORAGE_PREFIX}primos_record`;
         const oldRecord = parseInt(localStorage.getItem(recordKey) || '0', 10);
@@ -1412,12 +1751,14 @@ function finishGame(completedAll) {
             localStorage.setItem(recordKey, score.toString());
         }
     } else {
-        totalQuestions = currentDeck.length;
-        isPassed = completedAll && (score === totalQuestions);
+        totalQuestions = isPiModule() ? deckIndex : currentDeck.length;
+        isPassed = isPiModule()
+            ? completedAll
+            : (completedAll && (score === totalQuestions));
         if (isPassed) {
             triggerConfetti();
             playFanfare();
-            if (currentPhaseIndex + 1 < mod.phases.length) {
+            if (!isPiModule() && currentPhaseIndex + 1 < mod.phases.length) {
                 saveHighestUnlockedPhase(mod.id, currentPhaseIndex + 1);
             }
         }
@@ -1430,7 +1771,31 @@ function finishGame(completedAll) {
     populatePhases();
 
     let html = '';
-    if (mod.isInfinite) {
+    if (isPiModule()) {
+        const piRecordKey = `${STORAGE_PREFIX}pi_record`;
+        const oldRecord = parseInt(localStorage.getItem(piRecordKey) || '0', 10);
+        if (score > oldRecord) {
+            localStorage.setItem(piRecordKey, score.toString());
+        }
+        const record = localStorage.getItem(piRecordKey) || score;
+        html = `
+            <div class="result-container">
+                <div class="result-badge ${score > 0 ? 'pass' : 'fail'}">
+                    Sequência de π finalizada
+                </div>
+                <table class="result-summary">
+                    <tr>
+                        <td><strong>Blocos Acertos</strong><span>${score}</span></td>
+                        <td><strong>Recorde</strong><span>${record}</span></td>
+                        <td><strong>Tempo Médio</strong><span>${avgTime}s</span></td>
+                    </tr>
+                </table>
+                <p style="font-size: .95rem; color: var(--text-muted); margin: 10px 0;">
+                    Você digitou ${getPiConsumed()} dígitos de π nesta rodada (${PI_CHUNK_DIGITS} por bloco). Treine novamente para superar seu recorde!
+                </p>
+            </div>
+        `;
+    } else if (mod.isInfinite) {
         const record = localStorage.getItem(`${STORAGE_PREFIX}primos_record`) || score;
         html = `
             <div class="result-container">
@@ -1478,10 +1843,19 @@ function finishGame(completedAll) {
     startButton.focus();
 }
 
+/**
+ * Máximo de dígitos aceitos para a questão atual.
+ * Em π, limita ao tamanho do bloco (ex.: 3 dígitos).
+ */
+function getMaxInputLength() {
+    if (isPiModule()) return PI_CHUNK_DIGITS;
+    return MAX_INPUT_DIGITS;
+}
+
 /* Eventos de Entrada */
 numericInput.addEventListener('input', () => {
     if (!waitingAnswer || !isPlaying) return;
-    numericInput.value = numericInput.value.replace(/[^0-9]/g, '');
+    numericInput.value = numericInput.value.replace(/[^0-9]/g, '').slice(0, getMaxInputLength());
 });
 
 numericInput.addEventListener('keydown', (e) => {
@@ -1500,7 +1874,7 @@ function handleNumpad(action) {
     } else if (action === 'enter') {
         submitAnswer();
     } else if (/^[0-9]$/.test(action)) {
-        if (numericInput.value.length < 10) {
+        if (numericInput.value.length < getMaxInputLength()) {
             numericInput.value += action;
             if (numericInput.value === currentQuestion.correctAnswer.trim()) {
                 submitAnswer();
@@ -1545,7 +1919,7 @@ document.addEventListener('keydown', (event) => {
             if (document.activeElement !== numericInput) {
                 numericInput.focus();
             }
-            if (numericInput.value.length < 10) {
+            if (numericInput.value.length < getMaxInputLength()) {
                 numericInput.value += key;
                 if (numericInput.value === currentQuestion.correctAnswer.trim()) {
                     submitAnswer();
@@ -1577,6 +1951,30 @@ phaseSelect.addEventListener('change', () => {
     currentPhaseIndex = parseInt(phaseSelect.value, 10);
     updatePhaseDetails();
     statusDiv.innerHTML = '';
+});
+
+/* Sanea o limite digitado: mantém apenas inteiros dentro da faixa do módulo. */
+limitInput.addEventListener('input', () => {
+    const mod = MODULES[currentModuleIndex];
+    const maxLimit = LIMITED_MODULE_LIMITS[mod.id] || 1;
+    const raw = limitInput.value.trim();
+    if (raw === '') return;                       // deixa vazio enquanto digita
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) {
+        limitInput.value = '1';
+        return;
+    }
+    const clamped = Math.max(1, Math.min(maxLimit, n));
+    if (String(clamped) !== raw) {
+        limitInput.value = String(clamped);
+    }
+});
+
+/* Ao sair do campo, garante um valor válido (nunca vazio). */
+limitInput.addEventListener('blur', () => {
+    if (limitInput.value.trim() === '') {
+        limitInput.value = '1';
+    }
 });
 
 startButton.addEventListener('click', startGame);
