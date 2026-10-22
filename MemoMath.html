@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>MemoMath - Memorização Matemática</title>
     <meta name="description" content="Treine memorização matemática em alta velocidade com resposta em até 2 segundos.">
     <meta name="theme-color" content="#222222">
@@ -477,6 +477,8 @@
             align-items: center;
             justify-content: center;
             user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -910,7 +912,7 @@ const MODULES = [
             {
                 id: 'primos_infinito',
                 title: 'Sequência Infinita de Primos',
-                description: 'Digite o próximo número primo em ordem (2 --> 3, 3 --> 5, 5 --> 7...) até errar.',
+                description: 'Digite o próximo número primo em ordem (2 -> 3, 3 -> 5, 5 -> 7...) até errar.',
                 tips: 'Apenas este módulo é em ordem contínua. Responda em até 2 segundos.',
                 buildDeck() { return []; }
             }
@@ -1256,10 +1258,10 @@ function nextQuestion() {
     deckIndex++;
 
     if (mod.isInfinite) {
-        // Primos: formato "x -->"
+        // Primos: formato "x ->"
         const targetNext = getNextPrime(primeCurrent);
         currentQuestion = {
-            question: `${primeCurrent} -->`,
+            question: `${primeCurrent} ->`,
             sub: '',
             correctAnswer: `${targetNext}`
         };
@@ -1282,9 +1284,10 @@ function nextQuestion() {
     questionStartTime = performance.now();
     startTimer();
 
-    setTimeout(() => {
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (!isTouch) {
         numericInput.focus();
-    }, 40);
+    }
 }
 
 function startTimer() {
@@ -1345,7 +1348,7 @@ function submitAnswer() {
             primeCurrent = parseInt(currentQuestion.correctAnswer, 10);
         }
 
-        setTimeout(nextQuestion, 300);
+        setTimeout(nextQuestion, 80);
     } else {
         numericInput.classList.add('incorrect');
         playWrongSound();
@@ -1478,12 +1481,7 @@ function finishGame(completedAll) {
 /* Eventos de Entrada */
 numericInput.addEventListener('input', () => {
     if (!waitingAnswer || !isPlaying) return;
-    const val = numericInput.value.replace(/[^0-9]/g, '');
-    numericInput.value = val;
-
-    if (val === currentQuestion.correctAnswer.trim()) {
-        submitAnswer();
-    }
+    numericInput.value = numericInput.value.replace(/[^0-9]/g, '');
 });
 
 numericInput.addEventListener('keydown', (e) => {
@@ -1495,11 +1493,8 @@ numericInput.addEventListener('keydown', (e) => {
 
 correctionOverlay.addEventListener('click', advanceFromCorrection);
 
-numpad.addEventListener('click', (e) => {
-    const btn = e.target.closest('.num-btn');
-    if (!btn || !waitingAnswer || !isPlaying) return;
-    const action = btn.dataset.val;
-
+function handleNumpad(action) {
+    if (!waitingAnswer || !isPlaying) return;
     if (action === 'backspace') {
         numericInput.value = numericInput.value.slice(0, -1);
     } else if (action === 'enter') {
@@ -1512,6 +1507,13 @@ numpad.addEventListener('click', (e) => {
             }
         }
     }
+}
+
+numpad.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('.num-btn');
+    if (!btn) return;
+    e.preventDefault();
+    handleNumpad(btn.dataset.val);
 });
 
 document.addEventListener('keydown', (event) => {
@@ -1538,13 +1540,28 @@ document.addEventListener('keydown', (event) => {
     }
 
     if (isPlaying && waitingAnswer) {
-        if (document.activeElement !== numericInput) {
-            if (/^[0-9]$/.test(key)) {
+        if (/^[0-9]$/.test(key)) {
+            event.preventDefault();
+            if (document.activeElement !== numericInput) {
                 numericInput.focus();
-            } else if (key === 'Enter') {
-                event.preventDefault();
-                submitAnswer();
             }
+            if (numericInput.value.length < 10) {
+                numericInput.value += key;
+                if (numericInput.value === currentQuestion.correctAnswer.trim()) {
+                    submitAnswer();
+                }
+            }
+            return;
+        }
+        if (key === 'Backspace') {
+            event.preventDefault();
+            numericInput.value = numericInput.value.slice(0, -1);
+            return;
+        }
+        if (key === 'Enter') {
+            event.preventDefault();
+            submitAnswer();
+            return;
         }
     }
 });
