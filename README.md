@@ -1,6 +1,6 @@
 # MemoMath - Memorização Matemática
 
-Aplicativo minimalista para treinar a memorização matemática em alta velocidade com **1.5 segundos por dígito da resposta**.
+Aplicativo minimalista para treinar a memorização matemática em alta velocidade.
 
 Inspirado na arquitetura e simplicidade do [AbsolutePitch](https://github.com/BielXYZ/AbsolutePitch).
 
