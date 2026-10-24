@@ -9,7 +9,7 @@ Inspirado na arquitetura e simplicidade do [AbsolutePitch](https://github.com/Bi
 - **Timer Proporcional ao Tamanho da Resposta**:
   - O tempo disponível é `1.5 segundo × número de dígitos da resposta`, com mínimo de 1.5 segundo.
   - Ex.: `144` → 4.5s, `14159` → 7.5s, `1307674368000` → 19.5s.
-  - Ao errar ou esgotar o tempo, somente a resposta correta é exibida no centro da tela por 10 segundos, sem cronômetro apressando.
+  - Ao errar ou esgotar o tempo, somente a resposta correta é exibida no centro da tela por 3 segundos, sem cronômetro apressando.
 - **Números Primos (Em Ordem Sequencial: `x -->`)**:
   - A pergunta exibe o primo atual seguido de seta (`2 -->`, `3 -->`, `5 -->`, `7 -->` ...) e você digita o próximo primo.
   - Continua infinitamente até errar, registrando seu recorde de sequência.
@@ -75,7 +75,7 @@ As constantes de configuração ficam no início do bloco `<script>` em `MemoMat
 | `PI_TOTAL_DIGITS` | `1000` | Tamanho inicial do cache de dígitos de π (expande sob demanda). |
 | `MAX_SQUARE_BASE` | `100` | Maior base de quadrado (fase personalizada). |
 | `MAX_CUBE_BASE` | `100` | Maior base de cubo (fase personalizada). |
-| `CORRECTION_TIME` | `10000` | Tempo (ms) com a resposta correta em tela após um erro. |
+| `CORRECTION_TIME` | `3000` | Tempo (ms) com a resposta correta em tela após um erro. |
 | `TICK_SOUND_SECONDS` | `3` | Últimos segundos com som de contagem regressiva. |
 
 ## Execução
@@ -95,7 +95,7 @@ Abra [http://localhost:8000/MemoMath.html](http://localhost:8000/MemoMath.html) 
 | Iniciar treino | `F` ou `Enter` |
 | Digitar resposta | Teclas `0` a `9` |
 | Enviar resposta | Tecla `Enter` (ou auto-avanço ao acertar) |
-| Continuar após correção | `Espaço`, `Enter` ou clique |
+| Continuar após correção | (desabilitado — tela fixa de 3s) |
 | Apagar dígito | Tecla `Backspace` |
 | Sair da fase | `Esc` |
 

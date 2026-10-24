@@ -526,7 +526,7 @@
             border-color: var(--primary-bg);
         }
 
-        /* Tela de Correção: SOMENTE A RESPOSTA NO MEIO DA TELA POR 10 SEGUNDOS */
+        /* Tela de Correção: SOMENTE A RESPOSTA NO MEIO DA TELA POR 3 SEGUNDOS */
         .correction-overlay {
             display: none;
             position: fixed;
@@ -539,7 +539,7 @@
             text-align: center;
             padding: 24px;
             user-select: none;
-            cursor: pointer;
+            pointer-events: none;
         }
 
         .correction-big-answer {
@@ -689,7 +689,7 @@
     <div class="game-instructions">
         Modo aleatório com todos os itens da fase (exceto primos e dígitos de π, que são em ordem contínua).<br>
         Tempo de resposta: 1.5 segundos por dígito da resposta (mínimo de 1.5s).<br>
-        Em caso de erro, a resposta correta fica na tela por 10 segundos no centro.
+        Em caso de erro, a resposta correta fica na tela por 3 segundos no centro.
     </div>
 
     <div id="status" aria-live="polite"></div>
@@ -748,7 +748,7 @@
     <!-- Tela de Correção: SOMENTE A RESPOSTA NO MEIO DA TELA POR 10 SEGUNDOS -->
     <div class="correction-overlay" id="correction-overlay">
         <div class="correction-big-answer" id="corr-answer"></div>
-        <div class="correction-subtext">Pressione Espaço ou clique para continuar</div>
+        <div class="correction-subtext">Aguarde...</div>
     </div>
 </div>
 
@@ -769,7 +769,7 @@ const MIN_RESPONSE_TIME = 1500;   // Tempo mínimo de resposta em ms (teto infer
 const TICK_SOUND_SECONDS = 3;     // Quantos segundos finais tocam o "tic" do relógio.
 
 /* --- TELA DE CORREÇÃO (quando erra) ------------------------------------- */
-const CORRECTION_TIME = 10000;    // Tempo que a resposta correta fica no centro (ms).
+const CORRECTION_TIME = 3000;    // Tempo que a resposta correta fica no centro (ms).
 
 /* --- ENTRADA DE DADOS ---------------------------------------------------- */
 const MAX_INPUT_DIGITS = 20;      // Máximo de dígitos aceitos no campo de resposta.
@@ -1707,7 +1707,7 @@ function handleTimeout() {
 }
 
 /**
- * Ao errar: mostra SOMENTE a resposta no meio da tela por 10 segundos,
+ * Ao errar: mostra SOMENTE a resposta no meio da tela por 3 segundos,
  * e depois finaliza a rodada.
  */
 function showCenteredCorrectionAndEnd() {
@@ -1865,7 +1865,7 @@ numericInput.addEventListener('keydown', (e) => {
     }
 });
 
-correctionOverlay.addEventListener('click', advanceFromCorrection);
+/* correctionOverlay não é mais interativo: tela fixa de resultado. */
 
 function handleNumpad(action) {
     if (!waitingAnswer || !isPlaying) return;
@@ -1900,11 +1900,9 @@ document.addEventListener('keydown', (event) => {
     }
 
     if (showingCorrection && isPlaying) {
-        if (key === 'Enter' || key === ' ') {
-            event.preventDefault();
-            advanceFromCorrection();
-            return;
-        }
+        // Tela fixa: ignora teclas de avanço (Espaço/Enter).
+        event.preventDefault();
+        return;
     }
 
     if (!isPlaying && (key.toLowerCase() === 'f' || key === 'Enter')) {
