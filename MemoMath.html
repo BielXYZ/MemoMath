@@ -542,6 +542,14 @@
             pointer-events: none;
         }
 
+        .correction-question {
+            font-size: clamp(1.6rem, 6vw, 2.6rem);
+            font-weight: 700;
+            color: var(--text-muted);
+            margin: 0 0 18px;
+            text-align: center;
+        }
+
         .correction-big-answer {
             font-size: clamp(4.8rem, 20vw, 8rem);
             font-weight: 800;
@@ -747,8 +755,8 @@
 
     <!-- Tela de Correção: SOMENTE A RESPOSTA NO MEIO DA TELA POR 5 SEGUNDOS -->
     <div class="correction-overlay" id="correction-overlay">
+        <div class="correction-question" id="corr-question"></div>
         <div class="correction-big-answer" id="corr-answer"></div>
-    </div>
 </div>
 
 <script>
@@ -1399,6 +1407,7 @@ const numpad = document.getElementById('numpad');
 
 const correctionOverlay = document.getElementById('correction-overlay');
 const corrAnswer = document.getElementById('corr-answer');
+const corrQuestion = document.getElementById("corr-question");
 
 function getProgressKey(moduleId) {
     return `${STORAGE_PREFIX}${moduleId}`;
@@ -1716,6 +1725,7 @@ function showCenteredCorrectionAndEnd() {
     arenaMainContent.style.display = 'none';
     correctionOverlay.style.display = 'flex';
 
+    corrQuestion.textContent = [currentQuestion.question, currentQuestion.sub].filter(Boolean).join(" ");
     corrAnswer.textContent = currentQuestion.correctAnswer;
 
     if (correctionTimeoutId) clearTimeout(correctionTimeoutId);
